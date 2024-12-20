@@ -25,6 +25,9 @@ function WalletCache () {
 WalletCache.prototype.login = function (guid, options) {
   winston.debug('Logging in')
 
+  winston.info(`SESSION TOKEN: ${options?.sessionToken}`);
+
+
   var instance = generateInstance()
   var pwHash = generatePwHash(options.password)
   var deferred = q.defer()
@@ -34,14 +37,29 @@ WalletCache.prototype.login = function (guid, options) {
   var done = clearTimeout.bind(null, timeout)
   var removeFromStore = function () { this.instanceStore[guid] = this.pwHashStore[guid] = undefined }.bind(this)
 
+  if (!options.sessionToken) {
+    instance.WalletNetwork.establishSession().then(function (token) {
+      this.login(guid, Object.assign({}, options, { sessionToken: token }));
+    }.bind(this));
+
+    return q.resolve().then(function () {
+      return q();
+    });
+    
+  } else {
+
+    winston.info(`Using token: ${options.sessionToken}`);
+
   var handleLoginError = function (error) {
     if (error.indexOf('Error decrypting wallet') > -1) {
-      return q.reject('ERR_PASSWORD')
+      //return q.reject('ERR_PASSWORD')
+      winston.info(`ERR_PASSWORD (${options.sessionToken})`);
     }
 
     if (error.indexOf('Unable to establish session') > -1 && !options.sessionToken) {
       winston.debug('Failed to establish session, retrying...')
       return instance.WalletNetwork.establishSession().then(function (token) {
+        winston.info(`GOT TOKEN: ${options?.token}`);
         winston.debug('Established session, retrying login...')
         return this.login(guid, Object.assign({}, options, { sessionToken: token }))
       }.bind(this), function (error) {
@@ -77,7 +95,7 @@ WalletCache.prototype.login = function (guid, options) {
 
   var startupPromise = q.race([
     deferred.promise,
-    loginP.then(function () { return instance }).catch(handleLoginError)
+    loginP.then(function () { winston.info('Login successful'); return instance; }).catch(handleLoginError)
   ])
 
   this.instanceStore[guid] = startupPromise
@@ -92,6 +110,8 @@ WalletCache.prototype.login = function (guid, options) {
   }.bind(this))
 
   return startupPromise.catch(removeFromStore).fin(done)
+
+  }
 }
 
 WalletCache.prototype.createWallet = function (options) {

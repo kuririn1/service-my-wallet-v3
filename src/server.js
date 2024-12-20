@@ -44,6 +44,7 @@ legacyAPI.use(parseOptions({
   to: String,
   from: String,
   label: String,
+  sessionToken: String,
   recipients: Identity,
   fee_per_byte: Number,
   second_password: String,
